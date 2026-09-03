@@ -244,7 +244,7 @@
   .track-fill {
     height: 100%;
     width: 0;
-    transition: width 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: width 2400ms cubic-bezier(0.22, 1, 0.36, 1);
   }
   .fill-base { background: var(--baseline); opacity: 0.65; }
   .fill-agent {
@@ -608,7 +608,7 @@
       setTimeout(function () {
         fills[0].style.width = (r.baseline_rate / max * 100).toFixed(1) + "%";
         fills[1].style.width = (r.agent_rate / max * 100).toFixed(1) + "%";
-      }, 140);
+      }, 400);
     });
   }
 
@@ -634,7 +634,8 @@
     rows.forEach(function (r, i) {
       var row = document.createElement("div");
       row.className = "feed-row";
-      row.style.animationDelay = (140 + i * 90) + "ms";
+      // Stagger feed rows significantly so they appear to stream in
+      row.style.animationDelay = (600 + i * 400) + "ms";
       row.innerHTML =
         '<div class="f-cust"><b>' + r.customer_name + '</b>' +
           '<span>' + r.customer_id + '</span>' +
@@ -667,13 +668,13 @@
 
     countUp(el("v-baseline"), d.baseline_total_recovered, function (n) {
       return money(n);
-    });
+    }, 2000);
     countUp(el("v-agent"), d.agent_total_recovered, function (n) {
       return money(n);
-    }, 1800);
+    }, 3500);
     countUp(el("v-improve"), d.improvement_pct, function (n) {
       return "+" + n.toFixed(1) + "%";
-    }, 1800);
+    }, 3500);
 
     el("f-baseline").textContent = pct(d.baseline_value_rate);
     el("f-agent").textContent = pct(d.agent_value_rate);

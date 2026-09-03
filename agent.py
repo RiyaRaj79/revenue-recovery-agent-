@@ -450,7 +450,7 @@ def decide_action_mock(txn):
 
 def main():
     with open(
-        "../data/transactions.csv",
+        "transactions.csv",
         encoding="utf-8",
     ) as f:
 
@@ -617,6 +617,7 @@ def main():
             ),
             "recovered": recovered,
             "amount_recovered": amount_recovered,
+            "timestamp": row["timestamp"],
         })
 
     summary = summarize(

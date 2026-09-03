@@ -25,7 +25,7 @@ random.seed(7)
 
 
 def run_baseline(
-    transactions_path="../data/transactions.csv",
+    transactions_path="transactions.csv",
 ):
     results = []
 
@@ -62,6 +62,7 @@ def run_baseline(
                     else 0.0
                 ),
                 "action_taken": "standard_dunning",
+                "payment_method": row["payment_method"],
             })
 
     return results

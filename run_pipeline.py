@@ -19,19 +19,9 @@ BACKEND_DIR = os.path.dirname(
     os.path.abspath(__file__)
 )
 
-ROOT_DIR = os.path.dirname(
-    BACKEND_DIR
-)
-
-DATA_DIR = os.path.join(
-    ROOT_DIR,
-    "data",
-)
-
-DASHBOARD_DIR = os.path.join(
-    ROOT_DIR,
-    "dashboard",
-)
+ROOT_DIR = BACKEND_DIR
+DATA_DIR = BACKEND_DIR
+DASHBOARD_DIR = BACKEND_DIR
 
 
 def run(command, cwd):
@@ -166,6 +156,10 @@ def main():
             "customer_name": transaction[
                 "customer_name"
             ],
+            "timestamp": transaction.get("timestamp", ""),
+            "decline_label": transaction["decline_reason"].replace("_", " ").title(),
+            "payment_method_label": transaction.get("payment_method", "").replace("_", " ").title(),
+            "amount_at_risk": transaction["plan_value"],
             "decline_reason": transaction[
                 "decline_reason"
             ],
@@ -230,6 +224,27 @@ def main():
             * 100
         )
 
+    # Calculate by_method grouping
+    methods = {}
+    for txn in agent["transactions"]:
+        method = txn.get("payment_method", "unknown")
+        if method not in methods:
+            methods[method] = {
+                "label": method.replace("_", " ").title(),
+                "count": 0,
+                "agent_recovered": 0,
+                "baseline_recovered": 0
+            }
+        methods[method]["count"] += 1
+        methods[method]["agent_recovered"] += txn.get("amount_recovered", 0)
+
+    for txn in baseline["transactions"]:
+        method = txn.get("payment_method", "unknown")
+        if method in methods:
+            methods[method]["baseline_recovered"] += txn.get("amount_recovered", 0)
+
+    by_method = list(methods.values())
+
     dashboard_data = {
         "baseline_total_recovered":
             baseline_summary[
@@ -246,15 +261,20 @@ def main():
                 "total_at_risk"
             ],
 
-        "baseline_recovery_rate":
+        "baseline_value_rate":
             baseline_summary[
                 "overall_recovery_rate"
             ],
 
-        "agent_recovery_rate":
+        "agent_value_rate":
             agent_summary[
                 "overall_recovery_rate"
             ],
+            
+        "additional_recovered": agent_summary["total_recovered"] - baseline_summary["total_recovered"],
+        
+        "agent_mode": "API" if os.environ.get("ANTHROPIC_API_KEY") else "Local",
+        "live_calls": 0,
 
         "improvement_pct":
             round(
@@ -266,6 +286,8 @@ def main():
             agent_summary[
                 "action_match_rate"
             ],
+            
+        "by_method": by_method,
 
         "net_recovered":
             agent_summary[
