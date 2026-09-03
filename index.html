@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revenue Recovery Agent</title>
+<style>
+  :root {
+    --bg:        #07080a;
+    --panel:     #0d0f12;
+    --panel-2:   #101317;
+    --rule:      #191d23;
+    --rule-soft: #13161a;
+
+    --ink:       #e8ebee;
+    --ink-dim:   #79828e;
+    --ink-faint: #4b535d;
+
+    --recovered: #2fe08a;   /* money that came back */
+    --recovered-dim: rgba(47, 224, 138, 0.14);
+    --baseline:  #667180;   /* the dumb flow */
+    --risk:      #e0a355;   /* money still on the table */
+    --loss:      #6b4a4a;
+
+    --mono: "SF Mono", "JetBrains Mono", "Fira Code", "Cascadia Mono",
+            ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Ledger ruling + faint CRT wash over the whole page. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,0.014) 0px,
+        rgba(255,255,255,0.014) 1px,
+        transparent 1px,
+        transparent 28px
+      ),
+      radial-gradient(120% 80% at 50% -10%, rgba(47,224,138,0.05), transparent 60%);
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 28px 80px;
+  }
+
+  /* ---------- top bar ---------- */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: 26px 0 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .brand {
+    font-size: 13px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .brand .dot { color: var(--recovered); margin-right: 10px; }
+  .brand-sub {
+    color: var(--ink-faint);
+    letter-spacing: 0.16em;
+    font-size: 11px;
+    text-transform: uppercase;
+    margin-top: 5px;
+  }
+  .spacer { flex: 1 1 auto; }
+  .pill {
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border: 1px solid var(--rule);
+    color: var(--ink-dim);
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .pill.on {
+    color: var(--recovered);
+    border-color: rgba(47,224,138,0.35);
+    background: var(--recovered-dim);
+  }
+
+  /* ---------- section headings ---------- */
+  .sec {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 46px 0 20px;
+  }
+  .sec h2 {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    white-space: nowrap;
+  }
+  .sec .line { flex: 1; height: 1px; background: var(--rule); }
+  .sec .note {
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  /* ---------- hero stats ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-top: 30px;
+  }
+  .stat {
+    background: var(--panel);
+    padding: 22px 24px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 2px;
+    background: var(--baseline);
+    opacity: 0.5;
+  }
+  .stat.accent::after { background: var(--recovered); opacity: 1; }
+  .stat.accent {
+    background:
+      linear-gradient(180deg, rgba(47,224,138,0.055), rgba(47,224,138,0) 70%),
+      var(--panel);
+  }
+  .stat-label {
+    font-size: 10.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .stat-value {
+    margin-top: 14px;
+    font-size: clamp(24px, 3.1vw, 34px);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: var(--baseline);
+    white-space: nowrap;
+  }
+  .stat.accent .stat-value { color: var(--recovered); }
+  .stat.delta  .stat-value { color: var(--recovered); }
+  .stat-foot {
+    margin-top: 12px;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+  }
+  .stat-foot b { color: var(--ink-dim); font-weight: 600; }
+
+  .headline {
+    margin: 20px 0 0;
+    padding: 14px 18px;
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--risk);
+    background: var(--panel-2);
+    color: var(--ink-dim);
+    font-size: 12.5px;
+    line-height: 1.65;
+  }
+  .headline b { color: var(--ink); font-weight: 600; }
+  .headline .risk { color: var(--risk); }
+  .headline .good { color: var(--recovered); }
+
+  /* ---------- comparison bars ---------- */
+  .bars { border: 1px solid var(--rule); background: var(--panel); }
+  .bar-row {
+    padding: 18px 24px 20px;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .bar-row:last-child { border-bottom: 0; }
+  .bar-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .bar-name {
+    font-size: 12.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .bar-count { font-size: 11px; color: var(--ink-faint); }
+  .bar-lift {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--recovered);
+    font-variant-numeric: tabular-nums;
+  }
+  .track { display: flex; align-items: center; gap: 12px; margin-top: 7px; }
+  .track-tag {
+    width: 68px;
+    flex: none;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .track-bed {
+    flex: 1;
+    height: 12px;
+    background: var(--rule-soft);
+    border: 1px solid var(--rule);
+    position: relative;
+    overflow: hidden;
+  }
+  .track-fill {
+    height: 100%;
+    width: 0;
+    transition: width 1100ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .fill-base { background: var(--baseline); opacity: 0.65; }
+  .fill-agent {
+    background: linear-gradient(90deg, rgba(47,224,138,0.55), var(--recovered));
+    box-shadow: 0 0 14px rgba(47,224,138,0.28);
+  }
+  .track-val {
+    width: 54px;
+    flex: none;
+    text-align: right;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-dim);
+  }
+  .track.agent .track-val { color: var(--recovered); }
+
+  /* ---------- payment rails ---------- */
+  .rails {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  .rail {
+    background: var(--panel);
+    padding: 16px 18px 18px;
+  }
+  .rail-name {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .rail-count { font-size: 10.5px; color: var(--ink-faint); margin-top: 4px; }
+  .rail-nums {
+    margin-top: 12px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.7;
+  }
+  .rail-nums .b { color: var(--baseline); }
+  .rail-nums .a { color: var(--recovered); }
+  .rail-nums em {
+    font-style: normal;
+    color: var(--ink-faint);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: inline-block;
+    width: 62px;
+  }
+
+  /* ---------- activity feed ---------- */
+  .feed { border: 1px solid var(--rule); background: var(--panel); }
+  .feed-row {
+    display: grid;
+    grid-template-columns: 150px 150px 1fr 122px;
+    gap: 16px;
+    align-items: start;
+    padding: 15px 24px;
+    border-bottom: 1px solid var(--rule-soft);
+    opacity: 0;
+    transform: translateY(6px);
+    animation: slide-in 460ms ease forwards;
+  }
+  .feed-row:last-child { border-bottom: 0; }
+  @keyframes slide-in { to { opacity: 1; transform: none; } }
+
+  .f-cust {
+    color: var(--ink-dim);
+    font-size: 11.5px;
+    min-width: 0;
+  }
+  .f-cust > b {
+    font-weight: 500;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .f-cust span {
+    display: block;
+    color: var(--ink-faint);
+    font-size: 10px;
+    margin-top: 3px;
+    letter-spacing: 0.05em;
+  }
+  .f-tags { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+  .f-reason {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--risk);
+    border: 1px solid rgba(224,163,85,0.28);
+    background: rgba(224,163,85,0.07);
+    padding: 3px 7px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .f-rail {
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border: 1px solid var(--rule);
+    padding: 2px 6px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .f-body { min-width: 0; }
+  .f-action { font-size: 12px; color: var(--recovered); letter-spacing: 0.06em; }
+  .f-action .arrow { color: var(--ink-faint); margin-right: 7px; }
+  .f-reasoning {
+    margin-top: 6px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--ink-dim);
+  }
+  .f-amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .f-amount .amt { font-size: 13px; color: var(--recovered); }
+  .f-amount .amt.lost { color: var(--ink-faint); text-decoration: line-through; }
+  .f-amount .tag {
+    display: block;
+    margin-top: 4px;
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--recovered);
+  }
+  .f-amount .tag.lost { color: var(--loss); }
+
+  .cursor {
+    display: inline-block;
+    width: 7px;
+    height: 13px;
+    background: var(--recovered);
+    vertical-align: -2px;
+    margin-left: 8px;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-size: 11px;
+    color: var(--ink-faint);
+    line-height: 1.7;
+  }
+
+  .error {
+    margin-top: 60px;
+    padding: 24px;
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--risk);
+    background: var(--panel);
+    color: var(--ink-dim);
+    font-size: 12.5px;
+    line-height: 1.8;
+  }
+  .error b { color: var(--risk); }
+  .error code {
+    color: var(--ink);
+    background: var(--rule-soft);
+    padding: 2px 6px;
+    border: 1px solid var(--rule);
+  }
+
+  @media (max-width: 980px) {
+    .rails { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 860px) {
+    .stats { grid-template-columns: 1fr; }
+    .feed-row { grid-template-columns: 1fr; gap: 8px; }
+    .f-tags { flex-direction: row; }
+    .f-amount { text-align: left; }
+    .wrap { padding: 0 18px 60px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="brand"><span class="dot">&#9632;</span>Revenue Recovery Agent</div>
+      <div class="brand-sub">involuntary churn &middot; recovery ledger &middot; india</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="pill" id="pill-count">&mdash;</div>
+    <div class="pill" id="pill-mode">&mdash;</div>
+    <div class="pill on">&#9679; ledger live</div>
+  </header>
+
+  <main id="app" hidden>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">Baseline recovered</div>
+        <div class="stat-value" id="v-baseline">&#8377;0</div>
+        <div class="stat-foot">Standard dunning &middot; <b id="f-baseline">&mdash;</b> of value at risk</div>
+      </div>
+      <div class="stat accent">
+        <div class="stat-label">Agent recovered</div>
+        <div class="stat-value" id="v-agent">&#8377;0</div>
+        <div class="stat-foot">Reason-matched actions &middot; <b id="f-agent">&mdash;</b> of value at risk</div>
+      </div>
+      <div class="stat delta">
+        <div class="stat-label">Improvement</div>
+        <div class="stat-value" id="v-improve">0%</div>
+        <div class="stat-foot"><b id="f-improve">&mdash;</b> additional revenue recovered</div>
+      </div>
+    </div>
+
+    <p class="headline">
+      <b id="h-count">&mdash;</b> failed recurring payments carrying
+      <b class="risk" id="h-risk">&mdash;</b> in tenure-weighted value across UPI Autopay,
+      NACH e-mandates and cards. These customers never chose to leave &mdash; a card
+      expired, a balance ran short, a bank flagged a charge, an NPCI switch timed out,
+      or an RBI e-mandate silently lapsed.
+      The agent picked the textbook-correct recovery action
+      <b class="good" id="h-match">&mdash;</b> of the time.
+    </p>
+
+    <div class="sec">
+      <h2>Recovery rate by failure mode</h2>
+      <div class="line"></div>
+      <div class="note">baseline vs agent</div>
+    </div>
+    <div class="bars" id="bars"></div>
+
+    <div class="sec">
+      <h2>Recovered by payment rail</h2>
+      <div class="line"></div>
+      <div class="note">where the money came back</div>
+    </div>
+    <div class="rails" id="rails"></div>
+
+    <div class="sec">
+      <h2>Agent decision log</h2>
+      <div class="line"></div>
+      <div class="note">most recent 8 &middot; IST</div>
+    </div>
+    <div class="feed" id="feed"></div>
+
+    <footer>
+      Synthetic dataset &middot; amounts in INR &middot; recovery probabilities applied per
+      decline reason &middot; the elevated agent rate is earned only when the chosen action
+      matches the ideal action for that failure mode.<span class="cursor"></span>
+    </footer>
+
+  </main>
+
+  <div class="error" id="error" hidden></div>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var RUPEE = "₹";
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun",
+                "Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  // Indian digit grouping: 2-2-3 from the right, not 3-3-3.
+  //   1234567 -> 12,34,567
+  function money(n, compact) {
+    var v = Math.round(Math.abs(n));
+    if (compact) {
+      if (v >= 10000000) return RUPEE + (v / 10000000).toFixed(2) + " Cr";
+      if (v >= 100000)   return RUPEE + (v / 100000).toFixed(2) + " L";
+    }
+    var s = String(v);
+    if (s.length > 3) {
+      var last3 = s.slice(-3);
+      var rest = s.slice(0, -3);
+      var parts = [];
+      while (rest.length > 2) {
+        parts.unshift(rest.slice(-2));
+        rest = rest.slice(0, -2);
+      }
+      if (rest) parts.unshift(rest);
+      s = parts.join(",") + "," + last3;
+    }
+    return (n < 0 ? "-" : "") + RUPEE + s;
+  }
+
+  var pct = function (f, digits) {
+    return (f * 100).toFixed(digits === undefined ? 1 : digits) + "%";
+  };
+  var el = function (id) { return document.getElementById(id); };
+
+  // "2025-06-30T21:37:00+05:30" -> "30 Jun, 21:37"
+  function formatIST(ts) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(ts);
+    if (!m) return ts;
+    return parseInt(m[3], 10) + " " + MONTHS[parseInt(m[2], 10) - 1] +
+           ", " + m[4] + ":" + m[5];
+  }
+
+  // Animated count-up. easeOutExpo so the number lands hard rather than
+  // creeping to a stop.
+  function countUp(node, target, format, duration) {
+    var start = null;
+    var done = false;
+    duration = duration || 1500;
+    function frame(ts) {
+      if (done) return;
+      if (start === null) start = ts;
+      var t = Math.min((ts - start) / duration, 1);
+      var eased = t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+      node.textContent = format(target * eased);
+      if (t < 1) requestAnimationFrame(frame);
+      else done = true;
+    }
+    requestAnimationFrame(frame);
+    // Backstop: rAF is paused in a backgrounded tab, so never let the page sit
+    // on a fake zero if the animation could not run.
+    setTimeout(function () {
+      if (!done) { done = true; node.textContent = format(target); }
+    }, duration + 400);
+  }
+
+  function renderBars(rows) {
+    var host = el("bars");
+    // Scale bars against the largest rate on screen so differences read
+    // clearly instead of hugging the left edge.
+    var max = rows.reduce(function (m, r) {
+      return Math.max(m, r.baseline_rate, r.agent_rate);
+    }, 0.01);
+
+    rows.forEach(function (r) {
+      var lift = r.agent_rate - r.baseline_rate;
+      var row = document.createElement("div");
+      row.className = "bar-row";
+      row.innerHTML =
+        '<div class="bar-head">' +
+          '<div class="bar-name">' + r.label + '</div>' +
+          '<div class="bar-count">' + r.count + ' txns &middot; ' +
+            money(r.at_risk, true) + ' at risk</div>' +
+          '<div class="bar-lift">+' + (lift * 100).toFixed(1) + ' pts</div>' +
+        '</div>' +
+        '<div class="track">' +
+          '<div class="track-tag">baseline</div>' +
+          '<div class="track-bed"><div class="track-fill fill-base"></div></div>' +
+          '<div class="track-val">' + pct(r.baseline_rate) + '</div>' +
+        '</div>' +
+        '<div class="track agent">' +
+          '<div class="track-tag">agent</div>' +
+          '<div class="track-bed"><div class="track-fill fill-agent"></div></div>' +
+          '<div class="track-val">' + pct(r.agent_rate) + '</div>' +
+        '</div>';
+      host.appendChild(row);
+
+      // setTimeout rather than rAF: the widths must land even if the tab is
+      // backgrounded and frames are never painted.
+      var fills = row.querySelectorAll(".track-fill");
+      setTimeout(function () {
+        fills[0].style.width = (r.baseline_rate / max * 100).toFixed(1) + "%";
+        fills[1].style.width = (r.agent_rate / max * 100).toFixed(1) + "%";
+      }, 140);
+    });
+  }
+
+  function renderRails(rows) {
+    var host = el("rails");
+    if (!rows || !rows.length) { host.hidden = true; return; }
+    rows.forEach(function (r) {
+      var cell = document.createElement("div");
+      cell.className = "rail";
+      cell.innerHTML =
+        '<div class="rail-name">' + r.label + '</div>' +
+        '<div class="rail-count">' + r.count + ' failed payments</div>' +
+        '<div class="rail-nums">' +
+          '<div><em>baseline</em><span class="b">' + money(r.baseline_recovered, true) + '</span></div>' +
+          '<div><em>agent</em><span class="a">' + money(r.agent_recovered, true) + '</span></div>' +
+        '</div>';
+      host.appendChild(cell);
+    });
+  }
+
+  function renderFeed(rows) {
+    var host = el("feed");
+    rows.forEach(function (r, i) {
+      var row = document.createElement("div");
+      row.className = "feed-row";
+      row.style.animationDelay = (140 + i * 90) + "ms";
+      row.innerHTML =
+        '<div class="f-cust"><b>' + r.customer_name + '</b>' +
+          '<span>' + r.customer_id + '</span>' +
+          '<span>' + formatIST(r.timestamp) + (r.bank ? ' &middot; ' + r.bank : '') + '</span></div>' +
+        '<div class="f-tags">' +
+          '<div class="f-reason">' + r.decline_label + '</div>' +
+          (r.payment_method_label ? '<div class="f-rail">' + r.payment_method_label + '</div>' : '') +
+        '</div>' +
+        '<div class="f-body">' +
+          '<div class="f-action"><span class="arrow">&rsaquo;&rsaquo;</span>' +
+            r.action_label + '</div>' +
+          '<div class="f-reasoning">' + r.reasoning + '</div>' +
+        '</div>' +
+        '<div class="f-amount">' +
+          '<div class="amt' + (r.recovered ? '' : ' lost') + '">' +
+            money(r.recovered ? r.amount_recovered : r.amount_at_risk) + '</div>' +
+          '<span class="tag' + (r.recovered ? '' : ' lost') + '">' +
+            (r.recovered ? 'recovered' : 'lost') + '</span>' +
+        '</div>';
+      host.appendChild(row);
+    });
+  }
+
+  function render(d) {
+    el("app").hidden = false;
+
+    el("pill-count").textContent = d.transaction_count + " failed payments";
+    el("pill-mode").textContent = "agent: " + d.agent_mode +
+      (d.live_calls ? " (" + d.live_calls + " live)" : "");
+
+    countUp(el("v-baseline"), d.baseline_total_recovered, function (n) {
+      return money(n);
+    });
+    countUp(el("v-agent"), d.agent_total_recovered, function (n) {
+      return money(n);
+    }, 1800);
+    countUp(el("v-improve"), d.improvement_pct, function (n) {
+      return "+" + n.toFixed(1) + "%";
+    }, 1800);
+
+    el("f-baseline").textContent = pct(d.baseline_value_rate);
+    el("f-agent").textContent = pct(d.agent_value_rate);
+    el("f-improve").textContent = money(d.additional_recovered, true);
+
+    el("h-count").textContent = d.transaction_count;
+    el("h-risk").textContent = money(d.total_at_risk, true);
+    el("h-match").textContent = pct(d.action_match_rate, 0);
+
+    renderBars(d.by_reason);
+    renderRails(d.by_method);
+    renderFeed(d.activity_feed);
+  }
+
+  function fail(msg) {
+    var box = el("error");
+    box.hidden = false;
+    box.innerHTML =
+      '<b>Could not load dashboard_data.json</b><br>' + msg + '<br><br>' +
+      'Generate it, then serve this folder over HTTP &mdash; ' +
+      'opening index.html straight from disk blocks the fetch:<br><br>' +
+      '<code>python backend/run_pipeline.py</code><br>' +
+      '<code>cd dashboard &amp;&amp; python -m http.server 8000</code>';
+  }
+
+  fetch("./dashboard_data.json", { cache: "no-store" })
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.json();
+    })
+    .then(render)
+    .catch(function (err) { fail(String(err)); });
+})();
+</script>
+</body>
+</html>
